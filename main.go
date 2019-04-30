@@ -4,27 +4,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	uriSegments := strings.Split(r.URL.Path, "/")
-	username := strings.ToLower(uriSegments[1])
-	if username == "" {
-		http.NotFound(w, r)
-		return
-	}
-	fmt.Println(username)
-	resp, err1 := http.Get("https://github.com/users/" + username + "/contributions")
+// Streak - The Streak from Date to To Date
+type Streak struct {
+	From  time.Time `json:"from"`
+	To    time.Time `json:"to"`
+	Count int       `json:"count"`
+}
 
-	if err1 != nil {
-		http.NotFound(w, r)
-		fmt.Printf("%s", err1)
-		return
-	}
+func getStreakFromCalendar(resp *http.Response) {
 
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -36,35 +30,71 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err2)
 	}
 
+	r, _ := regexp.Compile(`([\d]*) contributions`)
+	numOfContributions := r.FindStringSubmatch(doc.Find(".f4").Text())[1]
+	fmt.Println("dasd", numOfContributions)
+	if numOfContributions == "0" {
+		return
+	}
+
 	curStreak := 0
 	longestStreak := 0
 	isStreak := false
-	doc.Find(".day").Each(func(i int, s *goquery.Selection) {
+
+	allDays := doc.Find(".day")
+
+	firstDate, exists := allDays.First().Attr("data-date")
+
+	if exists {
+		fmt.Println(firstDate)
+	}
+
+	allDays.Each(func(i int, s *goquery.Selection) {
 		count, exists := s.Attr("data-count")
 		if !exists {
 			return
 		}
-		num, err := strconv.Atoi(count)
-		if err != nil {
-			// handle error
-			fmt.Println(err)
-			// os.Exit(2)
-		}
-		if num != 0 && !isStreak {
+		fmt.Println(count, isStreak)
+		if count != "0" && !isStreak {
 			curStreak++
 			isStreak = true
-		} else if num != 0 && isStreak {
+		} else if count != "0" && isStreak {
 			curStreak++
-		} else if num == 0 && isStreak {
+		} else if count == "0" && isStreak {
 			longestStreak = curStreak
 			curStreak = 0
 			isStreak = false
 		}
 
 	})
-	fmt.Println(curStreak)
-	fmt.Println(longestStreak)
-	fmt.Fprintf(w, "hello")
+	fmt.Println("cur", curStreak)
+	fmt.Println("longest", longestStreak)
+	// fmt.Fprintf(w, "hello")
+}
+
+// https://github.com/users/mrdokenny/contributions?to=2016-1-1
+
+func getStreak(username string, date time.Time) (*http.Response, error) {
+	fmt.Println(username)
+	resp, err := http.Get("https://github.com/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
+
+	return resp, err
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	uriSegments := strings.Split(r.URL.Path, "/")
+	username := strings.ToLower(uriSegments[1])
+	if username == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	now := time.Now()
+	resp, err := getStreak(username, now)
+	if err != nil {
+		fmt.Println(err)
+	}
+	getStreakFromCalendar(resp)
 }
 
 func main() {
