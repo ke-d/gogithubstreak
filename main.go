@@ -36,7 +36,7 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 		if !exists1 || !exists2 {
 			return
 		}
-		// fmt.Println(count, isStreak, curStreak, longestStreak)
+
 		if count != "0" && !isStreak {
 			curStreak.Count++
 
@@ -46,7 +46,7 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 			isStreak = true
 		} else if count != "0" && isStreak {
 			curStreak.Count++
-		} else if count == "0" && isStreak {
+		} else if count == "0" && isStreak && allDays.Length()-1 != i {
 			if err == nil {
 				curStreak.To = parsedDate.AddDate(0, 0, -1)
 			}
@@ -59,10 +59,16 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 
 	})
 
-	lastDate, exists := allDays.Last().Attr("data-date")
+	// Check last
+	last := allDays.Last()
+	lastDate, exists1 := last.Attr("data-date")
+	count, exists2 := last.Attr("data-count")
 	parsedDate, err := time.Parse("2006-1-2", lastDate)
-	if isStreak && exists && err == nil {
+	if isStreak && exists1 && exists2 && err == nil && count != "0" {
 		curStreak.To = parsedDate
+	} else if isStreak && exists1 && exists2 && err == nil && count == "0" {
+		curStreak.To = parsedDate.AddDate(0, 0, -1)
+
 	}
 
 	if curStreak.Count > longestStreak.Count {
@@ -75,26 +81,27 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 // https://github.com/users/mrdokenny/contributions?to=2016-1-1
 
 func getCalendarFromGitHub(username string, date time.Time) (*http.Response, error) {
-	fmt.Println(username)
 	resp, err := http.Get("https://github.com/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
 
 	return resp, err
 }
 
-func findStreak(username string) (Streak, Streak, error) {
+// FindStreak - Find the streak from a username
+func FindStreak(username string) (Streak, Streak, error) {
 	now := time.Now()
 	resp, err := getCalendarFromGitHub(username, now)
 	if err != nil {
-		fmt.Println(err)
+		return Streak{}, Streak{}, errors.New("Cannot get calendar")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		fmt.Printf("status code error: %d %s", resp.StatusCode, resp.Status)
+		return Streak{}, Streak{}, errors.New("Cannot get calendar")
 	}
 	// Load the HTML document
 	doc, err2 := goquery.NewDocumentFromReader(resp.Body)
 	if err2 != nil {
-		log.Fatal(err2)
+		return Streak{}, Streak{}, errors.New("Could not load calendar")
 	}
 
 	reg, _ := regexp.Compile(`([\d]*) contributions`)
@@ -113,7 +120,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	curStreak, longestStreak, _ := findStreak(username)
+	curStreak, longestStreak, _ := FindStreak(username)
 	fmt.Println(curStreak, longestStreak)
 
 }
