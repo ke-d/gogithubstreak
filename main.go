@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,8 +19,74 @@ type Streak struct {
 	Count int       `json:"count"`
 }
 
-func getStreakFromCalendar(resp *http.Response) {
+func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 
+	curStreak := Streak{Count: 0}
+	longestStreak := Streak{Count: 0}
+	isStreak := false
+
+	allDays := doc.Find(".day")
+
+	allDays.Each(func(i int, s *goquery.Selection) {
+		count, exists1 := s.Attr("data-count")
+		date, exists2 := s.Attr("data-date")
+
+		parsedDate, err := time.Parse("2006-1-2", date)
+
+		if !exists1 || !exists2 {
+			return
+		}
+		// fmt.Println(count, isStreak, curStreak, longestStreak)
+		if count != "0" && !isStreak {
+			curStreak.Count++
+
+			if err == nil {
+				curStreak.From = parsedDate
+			}
+			isStreak = true
+		} else if count != "0" && isStreak {
+			curStreak.Count++
+		} else if count == "0" && isStreak {
+			if err == nil {
+				curStreak.To = parsedDate.AddDate(0, 0, -1)
+			}
+			if longestStreak.Count < curStreak.Count {
+				longestStreak = curStreak
+			}
+			curStreak = Streak{Count: 0}
+			isStreak = false
+		}
+
+	})
+
+	lastDate, exists := allDays.Last().Attr("data-date")
+	parsedDate, err := time.Parse("2006-1-2", lastDate)
+	if isStreak && exists && err == nil {
+		curStreak.To = parsedDate
+	}
+
+	if curStreak.Count > longestStreak.Count {
+		return curStreak, curStreak, nil
+	}
+	return curStreak, longestStreak, nil
+	// fmt.Fprintf(w, "hello")
+}
+
+// https://github.com/users/mrdokenny/contributions?to=2016-1-1
+
+func getCalendarFromGitHub(username string, date time.Time) (*http.Response, error) {
+	fmt.Println(username)
+	resp, err := http.Get("https://github.com/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
+
+	return resp, err
+}
+
+func findStreak(username string) (Streak, Streak, error) {
+	now := time.Now()
+	resp, err := getCalendarFromGitHub(username, now)
+	if err != nil {
+		fmt.Println(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		fmt.Printf("status code error: %d %s", resp.StatusCode, resp.Status)
@@ -30,55 +97,13 @@ func getStreakFromCalendar(resp *http.Response) {
 		log.Fatal(err2)
 	}
 
-	r, _ := regexp.Compile(`([\d]*) contributions`)
-	numOfContributions := r.FindStringSubmatch(doc.Find(".f4").Text())[1]
-	fmt.Println("dasd", numOfContributions)
-	if numOfContributions == "0" {
-		return
+	reg, _ := regexp.Compile(`([\d]*) contributions`)
+	numOfContributions := reg.FindStringSubmatch(doc.Find(".f4").Text())[1]
+
+	if numOfContributions != "0" {
+		return getStreakFromCalendar(doc)
 	}
-
-	curStreak := 0
-	longestStreak := 0
-	isStreak := false
-
-	allDays := doc.Find(".day")
-
-	firstDate, exists := allDays.First().Attr("data-date")
-
-	if exists {
-		fmt.Println(firstDate)
-	}
-
-	allDays.Each(func(i int, s *goquery.Selection) {
-		count, exists := s.Attr("data-count")
-		if !exists {
-			return
-		}
-		fmt.Println(count, isStreak)
-		if count != "0" && !isStreak {
-			curStreak++
-			isStreak = true
-		} else if count != "0" && isStreak {
-			curStreak++
-		} else if count == "0" && isStreak {
-			longestStreak = curStreak
-			curStreak = 0
-			isStreak = false
-		}
-
-	})
-	fmt.Println("cur", curStreak)
-	fmt.Println("longest", longestStreak)
-	// fmt.Fprintf(w, "hello")
-}
-
-// https://github.com/users/mrdokenny/contributions?to=2016-1-1
-
-func getStreak(username string, date time.Time) (*http.Response, error) {
-	fmt.Println(username)
-	resp, err := http.Get("https://github.com/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
-
-	return resp, err
+	return Streak{}, Streak{}, errors.New("No contributions")
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -88,13 +113,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	curStreak, longestStreak, _ := findStreak(username)
+	fmt.Println(curStreak, longestStreak)
 
-	now := time.Now()
-	resp, err := getStreak(username, now)
-	if err != nil {
-		fmt.Println(err)
-	}
-	getStreakFromCalendar(resp)
 }
 
 func main() {
