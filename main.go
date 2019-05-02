@@ -63,12 +63,11 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 	last := allDays.Last()
 	lastDate, exists1 := last.Attr("data-date")
 	count, exists2 := last.Attr("data-count")
-	parsedDate, err := time.Parse("2006-1-2", lastDate)
+	parsedLastDate, err := time.Parse("2006-1-2", lastDate)
 	if isStreak && exists1 && exists2 && err == nil && count != "0" {
-		curStreak.To = parsedDate
+		curStreak.To = parsedLastDate
 	} else if isStreak && exists1 && exists2 && err == nil && count == "0" {
-		curStreak.To = parsedDate.AddDate(0, 0, -1)
-
+		curStreak.To = parsedLastDate.AddDate(0, 0, -1)
 	}
 
 	if curStreak.Count > longestStreak.Count {
@@ -78,26 +77,30 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 	// fmt.Fprintf(w, "hello")
 }
 
-// https://github.com/users/mrdokenny/contributions?to=2016-1-1
-
 func getCalendarFromGitHub(username string, date time.Time) (*http.Response, error) {
 	resp, err := http.Get("https://github.com/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
-
+	if resp.StatusCode != 200 {
+		return resp, errors.New("Cannot get calendar")
+	}
 	return resp, err
 }
 
 // FindStreak - Find the streak from a username
-func FindStreak(username string) (Streak, Streak, error) {
+func FindStreak(username string) {
+	// TODO
+}
+
+// FindStreakInPastYear - Find the streak from a username in the past year
+func FindStreakInPastYear(username string) (Streak, Streak, error) {
 	now := time.Now()
 	resp, err := getCalendarFromGitHub(username, now)
 	if err != nil {
 		return Streak{}, Streak{}, errors.New("Cannot get calendar")
 	}
+
+	fmt.Println(resp.Status)
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		fmt.Printf("status code error: %d %s", resp.StatusCode, resp.Status)
-		return Streak{}, Streak{}, errors.New("Cannot get calendar")
-	}
+
 	// Load the HTML document
 	doc, err2 := goquery.NewDocumentFromReader(resp.Body)
 	if err2 != nil {
@@ -120,7 +123,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	curStreak, longestStreak, _ := FindStreak(username)
+	curStreak, longestStreak, _ := FindStreakInPastYear(username)
 	fmt.Println(curStreak, longestStreak)
 
 }

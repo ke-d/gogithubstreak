@@ -181,36 +181,6 @@ func Test_getCalendarFromGitHub(t *testing.T) {
 	}
 }
 
-func TestFindStreak(t *testing.T) {
-	type args struct {
-		username string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    Streak
-		want1   Streak
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := FindStreak(tt.args.username)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("FindStreak() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("FindStreak() got = %v, want %v", got, tt.want)
-			}
-			if !reflect.DeepEqual(got1, tt.want1) {
-				t.Errorf("FindStreak() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
 func Test_handler(t *testing.T) {
 	type args struct {
 		w http.ResponseWriter
@@ -238,6 +208,36 @@ func Test_main(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			main()
+		})
+	}
+}
+
+func TestFindStreakInPastYear(t *testing.T) {
+	type args struct {
+		username string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    Streak
+		want1   Streak
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, got1, err := FindStreakInPastYear(tt.args.username)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("FindStreakInPastYear() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("FindStreakInPastYear() got = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(got1, tt.want1) {
+				t.Errorf("FindStreakInPastYear() got1 = %v, want %v", got1, tt.want1)
+			}
 		})
 	}
 }
