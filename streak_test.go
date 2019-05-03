@@ -1,4 +1,4 @@
-package main
+package streak
 
 import (
 	"net/http"
@@ -181,37 +181,6 @@ func Test_getCalendarFromGitHub(t *testing.T) {
 	}
 }
 
-func Test_handler(t *testing.T) {
-	type args struct {
-		w http.ResponseWriter
-		r *http.Request
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handler(tt.args.w, tt.args.r)
-		})
-	}
-}
-
-func Test_main(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			main()
-		})
-	}
-}
-
 func TestFindStreakInPastYear(t *testing.T) {
 	type args struct {
 		username string
@@ -237,6 +206,45 @@ func TestFindStreakInPastYear(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got1, tt.want1) {
 				t.Errorf("FindStreakInPastYear() got1 = %v, want %v", got1, tt.want1)
+			}
+		})
+	}
+}
+
+func Test_getContributions(t *testing.T) {
+	doc1, _ := goquery.NewDocumentFromReader(strings.NewReader(`
+		<div>
+			Test
+		</div>
+	`))
+	doc2, _ := goquery.NewDocumentFromReader(strings.NewReader(`
+	<h2 class="f4 text-normal mb-2">
+		520 contributions
+			in the last year
+	</h2>
+	`))
+	doc3, _ := goquery.NewDocumentFromReader(strings.NewReader(`
+	<h2 class="f4 text-normal mb-2">
+		5-20 contributions
+			in the last year
+	</h2>
+	`))
+	type args struct {
+		doc *goquery.Document
+	}
+	tests := []struct {
+		name string
+		args args
+		want int
+	}{
+		{"Non contribution page", args{doc: doc1}, 0},
+		{"Page with contributions", args{doc: doc2}, 520},
+		{"Page with malformed contributions", args{doc: doc3}, 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getContributions(tt.args.doc); got != tt.want {
+				t.Errorf("getContributions() = %v, want %v", got, tt.want)
 			}
 		})
 	}

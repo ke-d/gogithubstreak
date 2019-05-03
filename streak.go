@@ -1,18 +1,16 @@
-package main
+package streak
 
 import (
 	"errors"
-	"fmt"
-	"log"
 	"net/http"
 	"regexp"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Streak - The Streak from Date to To Date
+// Streak - The Streak with count and the dates of the streak
 type Streak struct {
 	From  time.Time `json:"from"`
 	To    time.Time `json:"to"`
@@ -27,17 +25,18 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 
 	allDays := doc.Find(".day")
 
-	allDays.Each(func(i int, s *goquery.Selection) {
-		count, exists1 := s.Attr("data-count")
-		date, exists2 := s.Attr("data-date")
+	allDays.Each(func(i int, days *goquery.Selection) {
+		count, existsCount := days.Attr("data-count")
+		date, existsDate := days.Attr("data-date")
 
-		parsedDate, err := time.Parse("2006-1-2", date)
-
-		if !exists1 || !exists2 {
+		if !existsCount || !existsDate {
 			return
 		}
 
+		parsedDate, err := time.Parse("2006-1-2", date)
+
 		if count != "0" && !isStreak {
+			// New streak
 			curStreak.Count++
 
 			if err == nil {
@@ -45,8 +44,10 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 			}
 			isStreak = true
 		} else if count != "0" && isStreak {
+			// Still has a streak
 			curStreak.Count++
 		} else if count == "0" && isStreak && allDays.Length()-1 != i {
+			// Lost streak
 			if err == nil {
 				curStreak.To = parsedDate.AddDate(0, 0, -1)
 			}
@@ -59,22 +60,28 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 
 	})
 
-	// Check last
+	// Check last day
 	last := allDays.Last()
-	lastDate, exists1 := last.Attr("data-date")
-	count, exists2 := last.Attr("data-count")
-	parsedLastDate, err := time.Parse("2006-1-2", lastDate)
-	if isStreak && exists1 && exists2 && err == nil && count != "0" {
-		curStreak.To = parsedLastDate
-	} else if isStreak && exists1 && exists2 && err == nil && count == "0" {
-		curStreak.To = parsedLastDate.AddDate(0, 0, -1)
+	count, existsCount := last.Attr("data-count")
+	lastDate, existsDate := last.Attr("data-date")
+	if existsCount && existsDate {
+		parsedLastDate, err := time.Parse("2006-1-2", lastDate)
+		if isStreak && err == nil && count != "0" {
+			// If the last day has a streak
+			curStreak.To = parsedLastDate
+
+		} else if isStreak && err == nil && count == "0" {
+			// If the user hasn't commited on the last day, set current streak to the day before,
+			// since it doesn't mean that the user lost that streak if the user didn't commit yet on the current day
+			curStreak.To = parsedLastDate.AddDate(0, 0, -1)
+		}
 	}
 
+	// If the current streak is the longest streak, then return that for longest
 	if curStreak.Count > longestStreak.Count {
 		return curStreak, curStreak, nil
 	}
 	return curStreak, longestStreak, nil
-	// fmt.Fprintf(w, "hello")
 }
 
 func getCalendarFromGitHub(username string, date time.Time) (*http.Response, error) {
@@ -83,6 +90,19 @@ func getCalendarFromGitHub(username string, date time.Time) (*http.Response, err
 		return resp, errors.New("Cannot get calendar")
 	}
 	return resp, err
+}
+
+func getContributions(doc *goquery.Document) int {
+	reg, _ := regexp.Compile(`([\d]*) contributions`)
+	matchArr := reg.FindStringSubmatch(doc.Find(".f4").Text())
+
+	if len(matchArr) < 1 {
+		return 0
+	}
+	numOfContributionsStr := matchArr[1]
+	// Reg exp match should only have numbers at this point
+	numOfContributions, _ := strconv.Atoi(numOfContributionsStr)
+	return numOfContributions
 }
 
 // FindStreak - Find the streak from a username
@@ -98,37 +118,18 @@ func FindStreakInPastYear(username string) (Streak, Streak, error) {
 		return Streak{}, Streak{}, errors.New("Cannot get calendar")
 	}
 
-	fmt.Println(resp.Status)
 	defer resp.Body.Close()
 
 	// Load the HTML document
-	doc, err2 := goquery.NewDocumentFromReader(resp.Body)
-	if err2 != nil {
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
 		return Streak{}, Streak{}, errors.New("Could not load calendar")
 	}
 
-	reg, _ := regexp.Compile(`([\d]*) contributions`)
-	numOfContributions := reg.FindStringSubmatch(doc.Find(".f4").Text())[1]
+	numOfContributions := getContributions(doc)
 
-	if numOfContributions != "0" {
+	if numOfContributions != 0 {
 		return getStreakFromCalendar(doc)
 	}
 	return Streak{}, Streak{}, errors.New("No contributions")
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	uriSegments := strings.Split(r.URL.Path, "/")
-	username := strings.ToLower(uriSegments[1])
-	if username == "" {
-		http.NotFound(w, r)
-		return
-	}
-	curStreak, longestStreak, _ := FindStreakInPastYear(username)
-	fmt.Println(curStreak, longestStreak)
-
-}
-
-func main() {
-	http.HandleFunc("/", handler)
-	log.Fatal(http.ListenAndServe(":8080", nil))
 }
