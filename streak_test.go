@@ -2,6 +2,7 @@ package streak
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,8 +12,10 @@ import (
 )
 
 func Test_getStreakFromCalendar(t *testing.T) {
+	// doc1 has a day without data-count and data-date which should be ignored
 	doc1, _ := goquery.NewDocumentFromReader(strings.NewReader(`
 	<g transform="translate(0, 0)">
+	<rect class="day" width="8" height="8" x="11" y="30" fill="#ebedf0"></rect>
 	<rect class="day" width="8" height="8" x="11" y="30" fill="#ebedf0" data-count="1" data-date="2018-05-02"></rect>
 	<rect class="day" width="8" height="8" x="11" y="40" fill="#c6e48b" data-count="3" data-date="2018-05-03"></rect>
 	<rect class="day" width="8" height="8" x="11" y="50" fill="#c6e48b" data-count="1" data-date="2018-05-04"></rect>
@@ -154,63 +157,6 @@ func Test_getStreakFromCalendar(t *testing.T) {
 	}
 }
 
-func Test_getCalendarFromGitHub(t *testing.T) {
-	type args struct {
-		username string
-		date     time.Time
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *http.Response
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := getCalendarFromGitHub(tt.args.username, tt.args.date)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getCalendarFromGitHub() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getCalendarFromGitHub() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestFindStreakInPastYear(t *testing.T) {
-	type args struct {
-		username string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    Streak
-		want1   Streak
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := FindStreakInPastYear(tt.args.username)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("FindStreakInPastYear() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("FindStreakInPastYear() got = %v, want %v", got, tt.want)
-			}
-			if !reflect.DeepEqual(got1, tt.want1) {
-				t.Errorf("FindStreakInPastYear() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
 func Test_getContributions(t *testing.T) {
 	doc1, _ := goquery.NewDocumentFromReader(strings.NewReader(`
 		<div>
@@ -245,6 +191,166 @@ func Test_getContributions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getContributions(tt.args.doc); got != tt.want {
 				t.Errorf("getContributions() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getCalendarFromGitHub(t *testing.T) {
+	tsOkResponse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte(`OK`))
+	}))
+	defer tsOkResponse.Close()
+	tsBadResponse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+
+		w.Write([]byte(`Not Found`))
+	}))
+	defer tsBadResponse.Close()
+	type args struct {
+		client   Client
+		username string
+		date     time.Time
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *http.Response
+		wantErr bool
+	}{
+		{"Ok Response", args{client: Client{tsOkResponse.Client(), tsOkResponse.URL}, username: "any", date: time.Now()},
+			&http.Response{
+				StatusCode: 200},
+			false},
+		{"Bad Response", args{client: Client{tsBadResponse.Client(), tsBadResponse.URL}, username: "any", date: time.Now()},
+			&http.Response{
+				StatusCode: 404},
+			true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getCalendarFromGitHub(tt.args.client, tt.args.username, tt.args.date)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getCalendarFromGitHub() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got.StatusCode != tt.want.StatusCode {
+				t.Errorf("getCalendarFromGitHub() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFindStreakInPastYear(t *testing.T) {
+	tsOkResponse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte(`
+		<div class="f4">2 contributions</div>
+		<rect class="day" width="8" height="8" x="11" y="30" fill="#ebedf0" data-count="1" data-date="2018-05-02"></rect>
+		<rect class="day" width="8" height="8" x="11" y="40" fill="#c6e48b" data-count="1" data-date="2018-05-03"></rect>
+		<rect class="day" width="8" height="8" x="11" y="50" fill="#c6e48b" data-count="0" data-date="2018-05-04"></rect>
+		`))
+	}))
+	defer tsOkResponse.Close()
+
+	tsBadResponse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+
+		w.Write([]byte(`Not Found`))
+	}))
+	defer tsBadResponse.Close()
+
+	tsInvalidHTML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte(`invalid HTML`))
+	}))
+	defer tsInvalidHTML.Close()
+
+	tsOkNoContributionsResponse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte(`
+		<div class="f4">0 contributions</div>
+		`))
+	}))
+	defer tsOkNoContributionsResponse.Close()
+	type args struct {
+		client   Client
+		username string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    Streak
+		want1   Streak
+		wantErr bool
+	}{
+		{
+			"Test Ok Response with valid HTML",
+			args{
+				client:   Client{tsOkResponse.Client(), tsOkResponse.URL},
+				username: "any",
+			},
+			Streak{
+				Count: 2,
+				From:  time.Date(2018, 5, 2, 0, 0, 0, 0, time.UTC),
+				To:    time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC),
+			},
+			Streak{
+				Count: 2,
+				From:  time.Date(2018, 5, 2, 0, 0, 0, 0, time.UTC),
+				To:    time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC),
+			},
+			false,
+		},
+		{
+			"Test not found",
+			args{
+				client:   Client{tsBadResponse.Client(), tsBadResponse.URL},
+				username: "any",
+			},
+			Streak{},
+			Streak{},
+			true,
+		},
+		{
+			// Suppose to be testing the goquery.NewDocumentFromReade but it seems to go through
+			"Test invalid HTML",
+			args{
+				client:   Client{tsInvalidHTML.Client(), tsInvalidHTML.URL},
+				username: "any",
+			},
+			Streak{},
+			Streak{},
+			true,
+		},
+		{
+			"Test no contributions",
+			args{
+				client:   Client{tsOkNoContributionsResponse.Client(), tsOkNoContributionsResponse.URL},
+				username: "any",
+			},
+			Streak{},
+			Streak{},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, got1, err := FindStreakInPastYear(tt.args.client, tt.args.username)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("FindStreakInPastYear() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("FindStreakInPastYear() got = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(got1, tt.want1) {
+				t.Errorf("FindStreakInPastYear() got1 = %v, want %v", got1, tt.want1)
 			}
 		})
 	}

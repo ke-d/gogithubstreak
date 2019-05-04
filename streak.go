@@ -10,11 +10,17 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Streak - The Streak with count and the dates of the streak
+// Streak with count and the dates of the streak
 type Streak struct {
 	From  time.Time `json:"from"`
 	To    time.Time `json:"to"`
 	Count int       `json:"count"`
+}
+
+// Client with http Client for dependency injection
+type Client struct {
+	client  *http.Client
+	baseURL string
 }
 
 func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
@@ -84,8 +90,8 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 	return curStreak, longestStreak, nil
 }
 
-func getCalendarFromGitHub(username string, date time.Time) (*http.Response, error) {
-	resp, err := http.Get("https://github.com/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
+func getCalendarFromGitHub(client Client, username string, date time.Time) (*http.Response, error) {
+	resp, err := client.client.Get(client.baseURL + "/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
 	if resp.StatusCode != 200 {
 		return resp, errors.New("Cannot get calendar")
 	}
@@ -105,15 +111,10 @@ func getContributions(doc *goquery.Document) int {
 	return numOfContributions
 }
 
-// FindStreak - Find the streak from a username
-func FindStreak(username string) {
-	// TODO
-}
-
-// FindStreakInPastYear - Find the streak from a username in the past year
-func FindStreakInPastYear(username string) (Streak, Streak, error) {
+// FindStreakInPastYear returns the Current streak as the first return and the Longest streak in the second return as well as a potential error.
+func FindStreakInPastYear(client Client, username string) (Streak, Streak, error) {
 	now := time.Now()
-	resp, err := getCalendarFromGitHub(username, now)
+	resp, err := getCalendarFromGitHub(client, username, now)
 	if err != nil {
 		return Streak{}, Streak{}, errors.New("Cannot get calendar")
 	}
