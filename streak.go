@@ -19,8 +19,8 @@ type Streak struct {
 
 // Client with http Client for dependency injection
 type Client struct {
-	client  *http.Client
-	baseURL string
+	Client  *http.Client
+	BaseURL string
 }
 
 func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
@@ -90,8 +90,8 @@ func getStreakFromCalendar(doc *goquery.Document) (Streak, Streak, error) {
 	return curStreak, longestStreak, nil
 }
 
-func getCalendarFromGitHub(client Client, username string, date time.Time) (*http.Response, error) {
-	resp, err := client.client.Get(client.baseURL + "/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
+func getCalendarFromGitHub(client *Client, username string, date time.Time) (*http.Response, error) {
+	resp, err := client.Client.Get(client.BaseURL + "/users/" + username + "/contributions?to=" + date.Format("2006-1-2"))
 	if resp.StatusCode != 200 {
 		return resp, errors.New("Cannot get calendar")
 	}
@@ -112,7 +112,7 @@ func getContributions(doc *goquery.Document) int {
 }
 
 // FindStreakInPastYear returns the Current streak as the first return and the Longest streak in the second return as well as a potential error.
-func FindStreakInPastYear(client Client, username string) (Streak, Streak, error) {
+func FindStreakInPastYear(client *Client, username string) (Streak, Streak, error) {
 	now := time.Now()
 	resp, err := getCalendarFromGitHub(client, username, now)
 	if err != nil {

@@ -231,7 +231,7 @@ func Test_getCalendarFromGitHub(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getCalendarFromGitHub(tt.args.client, tt.args.username, tt.args.date)
+			got, err := getCalendarFromGitHub(&tt.args.client, tt.args.username, tt.args.date)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getCalendarFromGitHub() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -341,7 +341,7 @@ func TestFindStreakInPastYear(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := FindStreakInPastYear(tt.args.client, tt.args.username)
+			got, got1, err := FindStreakInPastYear(&tt.args.client, tt.args.username)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("FindStreakInPastYear() error = %v, wantErr %v", err, tt.wantErr)
 				return
